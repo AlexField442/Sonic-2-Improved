@@ -24178,7 +24178,8 @@ teleport_swap_table:
 	dc.w Obj_respawn_index,		Obj_respawn_index_P2,		  0
 	dc.w Obj_load_addr_right,	Obj_load_addr_2,		  3
 	dc.w Sonic_top_speed,		Tails_top_speed,		  2
-	dc.w Ring_start_addr,		Ring_start_addr_P2,		  1
+	dc.w Ring_start_addr_RAM,	Ring_start_addr_RAM_P2,		  0
+	dc.w Ring_start_addr_ROM,	Ring_start_addr_ROM_P2,		  3
 	dc.w CNZ_Visible_bumpers_start,	CNZ_Visible_bumpers_start_P2,  3
 	dc.w Camera_X_pos,		Camera_X_pos_P2,		 $F
 	dc.w Camera_X_pos_coarse,	Camera_X_pos_coarse_P2,		  0
@@ -29289,6 +29290,7 @@ JmpTo_BuildHUD_P2 ; JmpTo
 ; ----------------------------------------------------------------------------
 ; Pseudo-object that manages where rings are placed onscreen
 ; as you move through the level, and otherwise updates them.
+; This is a version ported from Sonic 3 & Knuckles
 ; ----------------------------------------------------------------------------
 
 ; loc_16F88:
@@ -29307,28 +29309,32 @@ RingsManager_States:	offsetTable
 RingsManager_Init:
 	addq.b	#2,(Rings_manager_routine).w ; => RingsManager_Main
 	bsr.w	RingsManager_Setup	; perform initial setup
-	lea	(Ring_Positions).w,a1
+	movea.l	(Ring_start_addr_ROM).w,a1
+	lea	(Ring_Positions).w,a2
 	move.w	(Camera_X_pos).w,d4
 	subq.w	#8,d4
 	bhi.s	+
 	moveq	#1,d4	; no negative values allowed
 	bra.s	+
 -
-	lea	6(a1),a1	; load next ring
+	addq.w	#4,a1	; load next ring 
+	addq.w	#2,a2
 +
-	cmp.w	2(a1),d4	; is the X pos of the ring < camera X pos?
+	cmp.w	(a1),d4	; is the X pos of the ring < camera X pos?
 	bhi.s	-		; if it is, check next ring
-	move.w	a1,(Ring_start_addr).w	; set start addresses
-	move.w	a1,(Ring_start_addr_P2).w
+	move.l	a1,(Ring_start_addr_ROM).w	; set start addresses in both ROM and RAM
+	move.l	a1,(Ring_start_addr_ROM_P2).w
+	move.w	a2,(Ring_start_addr_RAM).w
+	move.w	a2,(Ring_start_addr_RAM_P2).w
 	addi.w	#320+16,d4	; advance by a screen
 	bra.s	+
 -
-	lea	6(a1),a1	; load next ring
+	addq.w	#4,a1	; load next ring
 +
-	cmp.w	2(a1),d4	; is the X pos of the ring < camera X + 336?
-	bhi.s	-		; if it is, check next ring
-	move.w	a1,(Ring_end_addr).w	; set end addresses
-	move.w	a1,(Ring_end_addr_P2).w
+	cmp.w	(a1),d4		; is the X pos of the ring < camera X + 336?
+	bhi.s	-	; if it is, check next ring
+	move.l	a1,(Ring_end_addr_ROM).w	; set end addresses
+	move.l	a1,(Ring_end_addr_ROM_P2).w
 	rts
 ; ===========================================================================
 ; loc_16FDE:
@@ -29352,82 +29358,92 @@ RingsManager_Main:
 	subq.w	#1,(Ring_consumption_table).w	; subtract count
 +	dbf	d1,-	; repeat for all rings in table
 +
-	; update ring start and end addresses
-	movea.w	(Ring_start_addr).w,a1
+	; update ring start addresses
+	movea.l	(Ring_start_addr_ROM).w,a1
+	movea.w	(Ring_start_addr_RAM).w,a2
 	move.w	(Camera_X_pos).w,d4
 	subq.w	#8,d4
 	bhi.s	+
 	moveq	#1,d4
 	bra.s	+
 -
-	lea	6(a1),a1
+	addq.w	#4,a1
+	addq.w	#2,a2
 +
-	cmp.w	2(a1),d4
+	cmp.w	(a1),d4
 	bhi.s	-
 	bra.s	+
 -
-	subq.w	#6,a1
+	subq.w	#4,a1
+	subq.w	#2,a2
 +
 	cmp.w	-4(a1),d4
 	bls.s	-
-	move.w	a1,(Ring_start_addr).w	; update start address
-
-	movea.w	(Ring_end_addr).w,a2
-	addi.w	#320+16,d4
+	move.l	a1,(Ring_start_addr_ROM).w	; update start addresses
+	move.w	a2,(Ring_start_addr_RAM).w
+	tst.w	(Two_player_mode).w	; are we in 2P mode?
+	bne.s	+	; if we are, avoid copying over the P1 address
+	move.w	a2,(Ring_start_addr_RAM_P2).w
++
+	movea.l	(Ring_end_addr_ROM).w,a2	; set end address
+	addi.w	#320+16,d4	; advance by a screen
 	bra.s	+
 -
-	lea	6(a2),a2
+	addq.w	#4,a2
 +
-	cmp.w	2(a2),d4
+	cmp.w	(a2),d4
 	bhi.s	-
 	bra.s	+
 -
-	subq.w	#6,a2
+	subq.w	#4,a2
 +
 	cmp.w	-4(a2),d4
 	bls.s	-
-	move.w	a2,(Ring_end_addr).w	; update end address
+	move.l	a2,(Ring_end_addr_ROM).w	; update end address
 	tst.w	(Two_player_mode).w	; are we in 2P mode?
 	bne.s	+	; if we are, update P2 addresses
-	move.w	a1,(Ring_start_addr_P2).w	; otherwise, copy over P1 addresses
-	move.w	a2,(Ring_end_addr_P2).w
+	move.l	a1,(Ring_start_addr_ROM_P2).w	; otherwise, copy over P1 addresses
+	move.l	a2,(Ring_end_addr_ROM_P2).w
 	rts
 +
 	; update ring start and end addresses for P2
-	movea.w	(Ring_start_addr_P2).w,a1
+	movea.l	(Ring_start_addr_ROM_P2).w,a1
+	movea.w	(Ring_start_addr_RAM_P2).w,a2
 	move.w	(Camera_X_pos_P2).w,d4
 	subq.w	#8,d4
 	bhi.s	+
 	moveq	#1,d4
 	bra.s	+
 -
-	lea	6(a1),a1
+	addq.w	#4,a1
+	addq.w	#2,a2
 +
-	cmp.w	2(a1),d4
+	cmp.w	(a1),d4
 	bhi.s	-
 	bra.s	+
 -
-	subq.w	#6,a1
+	subq.w	#4,a1
+	subq.w	#2,a2
 +
 	cmp.w	-4(a1),d4
 	bls.s	-
-	move.w	a1,(Ring_start_addr_P2).w	; update start address
-
-	movea.w	(Ring_end_addr_P2).w,a2
-	addi.w	#320+16,d4
+	move.l	a1,(Ring_start_addr_ROM_P2).w	; update start addresses
+	move.w	a2,(Ring_start_addr_RAM_P2).w
+	movea.l	(Ring_end_addr_ROM_P2).w,a2		; set end address
+	addi.w	#320+16,d4	; advance by a screen
 	bra.s	+
 -
-	lea	6(a2),a2
+	addq.w	#4,a2
 +
-	cmp.w	2(a2),d4
+	cmp.w	(a2),d4
 	bhi.s	-
 	bra.s	+
 -
-	subq.w	#6,a2
+	subq.w	#4,a2
 +
 	cmp.w	-4(a2),d4
 	bls.s	-
-	move.w	a2,(Ring_end_addr_P2).w		; update end address
+	move.l	a2,(Ring_end_addr_ROM_P2).w		; update end address
 	rts
 
 ; ---------------------------------------------------------------------------
@@ -29438,20 +29454,39 @@ RingsManager_Main:
 
 ; loc_170BA:
 Touch_Rings:
-	movea.w	(Ring_start_addr).w,a1
-	movea.w	(Ring_end_addr).w,a2
-	cmpa.w	#MainCharacter,a0
-	beq.s	+
-	movea.w	(Ring_start_addr_P2).w,a1
-	movea.w	(Ring_end_addr_P2).w,a2
+	movea.l	(Ring_start_addr_ROM).w,a1	; load start and end addresses
+	movea.l	(Ring_end_addr_ROM).w,a2
+	cmpa.w	#MainCharacter,a0	; are we the main character?
+	beq.s	+		; if we are, continue on
+	movea.l	(Ring_start_addr_ROM_P2).w,a1	; load start and end addresses for P2
+	movea.l	(Ring_end_addr_ROM_P2).w,a2
 +
 	cmpa.l	a1,a2	; are there no rings in this area?
 	beq.w	Touch_Rings_Done	; if so, return
+	movea.w	(Ring_start_addr_RAM).w,a4	; load start address
+	cmpa.w	#MainCharacter,a0	; are we the main character?
+	beq.s	+		; if we are, continue on
+	movea.w	(Ring_start_addr_RAM_P2).w,a4	; load start address for P2
++
 	cmpi.w	#$5A,invulnerable_time(a0)
-	bhs.w	Touch_Rings_Done
+	bcc.w	Touch_Rings_Done
+	btst	#5,status_secondary(a0)	; does character have a lightning shield?
+	beq.s	Touch_Rings_NoAttraction	; if not, branch
 	move.w	x_pos(a0),d2
 	move.w	y_pos(a0),d3
-	subi_.w	#8,d2	; assume X radius to be 8
+	subi.w	#$40,d2
+	subi.w	#$40,d3
+	move.w	#6,d1
+	move.w	#$C,d6
+	move.w	#$80,d4
+	move.w	#$80,d5
+	bra.s	Touch_Rings_Loop
+; ===========================================================================
+	
+Touch_Rings_NoAttraction:
+	move.w	x_pos(a0),d2	; get character's position
+	move.w	y_pos(a0),d3
+	subi.w	#8,d2	; assume X radius to be 8
 	moveq	#0,d5
 	move.b	y_radius(a0),d5
 	subq.b	#3,d5
@@ -29462,46 +29497,50 @@ Touch_Rings:
 	moveq	#$A,d5
 +
 	move.w	#6,d1	; set ring radius
-	move.w	#12,d6	; set ring diameter
-	move.w	#16,d4	; set Sonic's X diameter
+	move.w	#$C,d6	; set ring diameter
+	move.w	#$10,d4	; set character's X diameter
 	add.w	d5,d5	; set Y diameter
 ; loc_17112:
 Touch_Rings_Loop:
-	tst.w	(a1)		; has this ring already been collided with?
+	tst.w	(a4)	; has this ring already been collided with?
 	bne.w	Touch_NextRing	; if it has, branch
-	move.w	2(a1),d0	; get ring X pos
+	move.w	(a1),d0		; get ring X pos
 	sub.w	d1,d0		; get ring left edge X pos
-	sub.w	d2,d0		; subtract Sonic's left edge X pos
-	bcc.s	+		; if Sonic's to the left of the ring, branch
+	sub.w	d2,d0		; subtract character's left edge X pos
+	bcc.s	+		; if character's to the left of the ring, branch
 	add.w	d6,d0		; add ring diameter
-	bcs.s	++		; if Sonic's colliding, branch
+	bcs.s	++		; if character's colliding, branch
 	bra.w	Touch_NextRing	; otherwise, test next ring
 +
-	cmp.w	d4,d0		; has Sonic crossed the ring?
-	bhi.w	Touch_NextRing	; if he has, branch
+	cmp.w	d4,d0		; has character crossed the ring?
+	bhi.w	Touch_NextRing	; if they have, branch
 +
-	move.w	4(a1),d0	; get ring Y pos
+	move.w	2(a1),d0	; get ring Y pos
 	sub.w	d1,d0		; get ring top edge pos
-	sub.w	d3,d0		; subtract Sonic's top edge pos
-	bcc.s	+		; if Sonic's above the ring, branch
+	sub.w	d3,d0		; subtract character's top edge pos
+	bcc.s	+		; if character's above the ring, branch
 	add.w	d6,d0		; add ring diameter
-	bcs.s	++		; if Sonic's colliding, branch
+	bcs.s	++		; if character's colliding, branch
 	bra.w	Touch_NextRing	; otherwise, test next ring
 +
-	cmp.w	d5,d0		; has Sonic crossed the ring?
-	bhi.w	Touch_NextRing	; if he has, branch
+	cmp.w	d5,d0		; has character crossed the ring?
+	bhi.w	Touch_NextRing	; if they have, branch
 +
-	move.w	#$604,(a1)	; set frame and destruction timer
+	btst	#5,status_secondary(a0)	; does character have a lightning shield?
+	bne.s	AttractRing			; if so, attract the ring towards the player	
+-
+	move.w	#$604,(a4)		; set frame and destruction timer
 	bsr.s	Touch_ConsumeRing
 	lea	(Ring_consumption_table+2).w,a3
 
 -	tst.w	(a3)+		; is this slot free?
 	bne.s	-		; if not, repeat until you find one
-	move.w	a1,-(a3)	; set ring address
+	move.w	a4,-(a3)	; set ring address
 	addq.w	#1,(Ring_consumption_table).w	; increase count
 ; loc_1715C:
 Touch_NextRing:
-	lea	6(a1),a1
+	addq.w	#4,a1
+	addq.w	#2,a4
 	cmpa.l	a1,a2		; are we at the last ring for this area?
 	bne.w	Touch_Rings_Loop	; if not, branch
 ; return_17166:
@@ -29512,8 +29551,23 @@ Touch_Rings_Done:
 Touch_ConsumeRing:
 	subq.w	#1,(Perfect_rings_left).w
 	cmpa.w	#MainCharacter,a0	; who collected the ring?
-	beq.w	CollectRing_Sonic	; if it was Sonic, branch here
+	beq.w	CollectRing		; if it was Sonic, branch here
 	bra.w	CollectRing_Tails	; if it was Tails, branch here
+; ===========================================================================
+AttractRing:
+	movea.l	a1,a3
+	jsr	SingleObjLoad
+	bne.w	AttractRing_NoFreeSlot
+	move.b	#$4C,(a1)
+	move.w	(a3),x_pos(a1)
+	move.w	2(a3),y_pos(a1)
+	move.w	a0,parent(a1)
+	move.w	#-1,(a4)
+	rts	
+; ===========================================================================
+AttractRing_NoFreeSlot:
+	movea.l	a3,a1
+	bra.s	-
 
 ; ---------------------------------------------------------------------------
 ; Subroutine to draw on-screen rings
@@ -29523,21 +29577,22 @@ Touch_ConsumeRing:
 
 ; loc_17178:
 BuildRings:
-	movea.w	(Ring_start_addr).w,a0
-	movea.w	(Ring_end_addr).w,a4
-	cmpa.l	a0,a4	; are there any rings on-screen?
-	bne.s	+	; if there are, branch
-	rts		; otherwise, return
+	movea.l	(Ring_start_addr_ROM).w,a0
+	move.l	(Ring_end_addr_ROM).w,d7
+	sub.l	a0,d7		; are there any rings on-screen?
+	bne.s	+		; if there are, branch
+	rts			; otherwise, return
 +
-	lea	(Camera_X_pos).w,a3
-; loc_1718A:
+	movea.w	(Ring_start_addr_RAM).w,a4	; load start address
+	lea	(Camera_X_pos).w,a3		; load camera x position
+
 BuildRings_Loop:
-	tst.w	(a0)		; has this ring been consumed?
+	tst.w	(a4)+		; has this ring been consumed?
 	bmi.w	BuildRings_NextRing	; if it has, branch
-	move.w	2(a0),d3	; get ring X pos
+	move.w	(a0),d3		; get ring X pos
 	sub.w	(a3),d3		; subtract camera X pos
 	addi.w	#128,d3		; screen top is 128x128 not 0x0
-	move.w	4(a0),d2	; get ring Y pos
+	move.w	2(a0),d2	; get ring Y pos
 	sub.w	4(a3),d2	; subtract camera Y pos
 	andi.w	#$7FF,d2
 	addi_.w	#8,d2
@@ -29547,7 +29602,7 @@ BuildRings_Loop:
 	addi.w	#128-8,d2
 	lea	(MapUnc_Rings).l,a1
 	moveq	#0,d1
-	move.b	1(a0),d1	; get ring frame
+	move.b	-1(a4),d1	; get ring frame
 	bne.s	+		; if this ring is using a specific frame, branch
 	move.b	(Rings_anim_frame).w,d1	; use global frame
 +
@@ -29569,8 +29624,8 @@ BuildRings_Loop:
 	move.w	d0,(a2)+	; set X pos
 ; loc_171EC:
 BuildRings_NextRing:
-	lea	6(a0),a0
-	cmpa.l	a0,a4
+	addq.w	#4,a0
+	subq.w	#4,d7
 	bne.w	BuildRings_Loop
 	rts
 
@@ -29580,15 +29635,15 @@ BuildRings_NextRing:
 
 ; ||||||||||||||| S U B R O U T I N E |||||||||||||||||||||||||||||||||||||||
 
-; loc_171F8:
 BuildRings_P1:
 	lea	(Camera_X_pos).w,a3
 	move.w	#128-8,d6
-	movea.w	(Ring_start_addr).w,a0
-	movea.w	(Ring_end_addr).w,a4
-	cmpa.l	a0,a4	; are there rings on-screen?
+	movea.l	(Ring_start_addr_ROM).w,a0
+	move.l	(Ring_end_addr_ROM).w,d7
+	movea.w	(Ring_start_addr_RAM).w,a4
+	sub.l	a0,d7	; are there rings on-screen?
 	bne.s	BuildRings_2P_Loop	; if there are, draw them
-	rts	; otherwise, return
+	rts
 
 ; ---------------------------------------------------------------------------
 ; Subroutine to draw on-screen rings for player 2 in a 2P versus game
@@ -29600,20 +29655,21 @@ BuildRings_P1:
 BuildRings_P2:
 	lea	(Camera_X_pos_P2).w,a3
 	move.w	#224+128-8,d6
-	movea.w	(Ring_start_addr_P2).w,a0
-	movea.w	(Ring_end_addr_P2).w,a4
-	cmpa.l	a0,a4	; are there rings on-screen?
+	movea.l	(Ring_start_addr_ROM_P2).w,a0
+	move.l	(Ring_end_addr_ROM_P2).w,d7
+	movea.w	(Ring_start_addr_RAM_P2).w,a4
+	sub.l	a0,d7	; are there rings on-screen?
 	bne.s	BuildRings_2P_Loop	; if there are, draw them
-	rts	; otherwise, return
+	rts
 ; ===========================================================================
 ; loc_17224:
 BuildRings_2P_Loop:
-	tst.w	(a0)		; has this ring been consumed?
+	tst.w	(a4)+		; has this ring been consumed?
 	bmi.w	BuildRings_2P_NextRing	; if it has, branch
-	move.w	2(a0),d3	; get ring X pos
+	move.w	(a0),d3		; get ring X pos
 	sub.w	(a3),d3		; subtract camera X pos
 	addi.w	#128,d3
-	move.w	4(a0),d2	; get ring Y pos
+	move.w	2(a0),d2	; get ring Y pos
 	sub.w	4(a3),d2	; subtract camera Y pos
 	andi.w	#$7FF,d2
 	addi.w	#128+8,d2
@@ -29623,9 +29679,9 @@ BuildRings_2P_Loop:
 	add.w	d6,d2		; add base Y pos
 	lea	(MapUnc_Rings).l,a1
 	moveq	#0,d1
-	move.b	1(a0),d1	; use ring-specific frame
-	bne.s	+		; if there is one
-	move.b	(Rings_anim_frame).w,d1	; otherwise use global frame
+	move.b	-1(a4),d1	; get ring frame
+	bne.s	+		; if this ring is using a specific frame, branch
+	move.b	(Rings_anim_frame).w,d1	; use global frame
 +
 	add.w	d1,d1
 	adda.w	(a1,d1.w),a1
@@ -29646,9 +29702,9 @@ BuildRings_2P_Loop:
 	move.w	d0,(a2)+	; set X pos
 
 BuildRings_2P_NextRing:
-	lea	6(a0),a0	; load next ring
-	cmpa.l	a0,a4		; are there any rings left?
-	bne.w	BuildRings_2P_Loop	; if there are, loop
+	addq.w	#4,a0	; load next ring
+	subq.w	#4,d7
+	bne.w	BuildRings_2P_Loop	; if there are rings left, loop
 	rts
 ; ===========================================================================
 ; cells are double the height in 2P mode, so halve the number of rows
@@ -29675,85 +29731,31 @@ RingsManager_Setup:
 	clearRAM Ring_Positions,Ring_Positions_End
 	; d0 = 0
 	lea	(Ring_consumption_table).w,a1
-
-	move.w	#bytesToLcnt(Ring_consumption_table_End-Ring_consumption_table-$40),d1	; coding error, that '-$40' shouldn't be there
--	move.l	d0,(a1)+	; only half of Ring_consumption_table is cleared
+	; in the Sonic 2 version a coding error is present that causes only half of the Ring_consumption_table to be cleared.
+	move.w	#bytesToLcnt(Ring_consumption_table_End-Ring_consumption_table),d1
+-	move.l	d0,(a1)+
 	dbf	d1,-
 
 	moveq	#0,d5
 	moveq	#0,d0
-	move.w	(Current_ZoneAndAct).w,d0
+	move.w	(Current_ZoneAndAct).w,d0	; get the current zone and act
 	ror.b	#1,d0
-	lsr.w	#6,d0
-	lea	(Off_Rings).l,a1
+	lsr.w	#6,d0			; get the act
+	lea	(Off_Rings).l,a1	; get the rings for the act
 	move.w	(a1,d0.w),d0
 	lea	(a1,d0.w),a1
-	lea	(Ring_Positions+6).w,a2	; first ring is left blank
-; loc_172E0:
-RingsMgr_NextRowOrCol:
-	move.w	(a1)+,d2	; is this the last ring?
-	bmi.s	RingsMgr_SortRings	; if it is, sort the rings
-	move.w	(a1)+,d3	; is this a column of rings?
-	bmi.s	RingsMgr_RingCol	; if it is, branch
-	move.w	d3,d0
-	rol.w	#4,d0
-	andi.w	#7,d0		; store number of rings
-	andi.w	#$FFF,d3	; store Y pos
-; loc_172F4:
-RingsMgr_NextRingInRow:
-	move.w	#0,(a2)+	; set initial status
-	move.w	d2,(a2)+	; set X pos
-	move.w	d3,(a2)+	; set Y pos
-	addi.w	#$18,d2		; increment X pos
-	addq.w	#1,d5		; increment perfect counter
-	dbf	d0,RingsMgr_NextRingInRow
-	bra.s	RingsMgr_NextRowOrCol
-; ===========================================================================
-; loc_17308:
-RingsMgr_RingCol:
-	move.w	d3,d0
-	rol.w	#4,d0
-	andi.w	#7,d0		; store number of rings
-	andi.w	#$FFF,d3	; store Y pos
-; loc_17314:
-RingsMgr_NextRingInCol:
-	move.w	#0,(a2)+	; set initial status
-	move.w	d2,(a2)+	; set X pos
-	move.w	d3,(a2)+	; set Y pos
-	addi.w	#$18,d3		; increment Y pos
-	addq.w	#1,d5		; increment perfect counter
-	dbf	d0,RingsMgr_NextRingInCol
-	bra.s	RingsMgr_NextRowOrCol
-; ===========================================================================
-; loc_17328:
-RingsMgr_SortRings:
-	move.w	d5,(Perfect_rings_left).w
-	move.w	#0,(Perfect_rings_flag).w	; no idea what this is
-	moveq	#-1,d0
-	move.l	d0,(a2)+	; set X pos of last ring to -1
-	lea	(Ring_Positions+2).w,a1	; X pos of first ring
-
-	move.w	#$FE,d3		; sort 255 rings
--	move.w	d3,d4
-	lea	6(a1),a2	; load next ring for comparison
-	move.w	(a1),d0		; get X pos of current ring
-
--	tst.w	(a2)		; is the next ring blank?
-	beq.s	+		; if it is, branch
-	cmp.w	(a2),d0		; is the X pos of current ring <= X pos of next ring?
-	bls.s	+		; if so, branch
-	move.l	(a1),d1		; otherwise, swap the rings
-	move.l	(a2),d0
-	move.l	d0,(a1)
-	move.l	d1,(a2)
-	swap	d0
+	move.l	a1,(Ring_start_addr_ROM).w
+	addq.w	#4,a1
+	moveq	#0,d5
+	move.w	#(Max_Rings-1),d0	
+-
+	tst.l	(a1)+	; get the next ring
+	bmi.s	+		; if there's no more, carry on
+	addq.w	#1,d5	; increment perfect counter
+	dbf	d0,-
 +
-	lea	6(a2),a2	; load next comparison ring
-	dbf	d4,-		; repeat
-
-	lea	6(a1),a1	; load next ring
-	dbf	d3,--		; repeat
-
+	move.w	d5,(Perfect_rings_left).w	; set the perfect ring amount for the act
+	move.w	#0,(Perfect_rings_flag).w	; clear the perfect ring flag
 	rts
 ; ===========================================================================
 
@@ -88472,14 +88474,6 @@ MiscKoz_SpecialLevelLayout:	BINCLUDE	"misc/Special stage level layouts (Nemesis 
 MiscKoz_SpecialObjectLocations:	BINCLUDE	"misc/Special stage object location lists (Kosinski compression).bin"
 
 ;--------------------------------------------------------------------------------------
-; Filler (free space) (unnecessary; could be replaced with "even")
-;--------------------------------------------------------------------------------------
-	align $100
-
-
-
-
-;--------------------------------------------------------------------------------------
 ; Offset index of ring locations
 ;  The first commented number on each line is an array index; the second is the
 ;  associated zone.
@@ -88555,11 +88549,6 @@ Rings_ARZ_1:	BINCLUDE	"level/rings/ARZ_1.bin"
 Rings_ARZ_2:	BINCLUDE	"level/rings/ARZ_2.bin"
 Rings_SCZ_1:	BINCLUDE	"level/rings/SCZ_1.bin"
 Rings_SCZ_2:	BINCLUDE	"level/rings/SCZ_2.bin"
-
-; --------------------------------------------------------------------------------------
-; Filler (free space) (unnecessary; could be replaced with "even")
-; --------------------------------------------------------------------------------------
-	align $200
 
 ; --------------------------------------------------------------------------------------
 ; Offset index of object locations
@@ -88686,14 +88675,6 @@ Objects_Null:
 	ObjectLayoutBoundary
 	; And another
 	ObjectLayoutBoundary
-
-; --------------------------------------------------------------------------------------
-; Filler (free space) (unnecessary; could be replaced with "even")
-; --------------------------------------------------------------------------------------
-	align $1000
-
-
-
 
 ; ---------------------------------------------------------------------------
 ; Subroutine to load the sound driver

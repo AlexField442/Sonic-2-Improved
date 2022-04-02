@@ -964,6 +964,13 @@ palette_line_size =	$10*2	; 16 word entries
 ; to let them work in both 16-bit and 32-bit addressing modes.
 ramaddr function x,-(-x)&$FFFFFFFF
 
+Max_Rings = 255 ; maximum number possible is 759
+    if Max_Rings > 759
+    fatal "Maximum number of rings possible is 759"
+    endif
+
+Rings_Space = (Max_Rings+1)*2
+
 ; ---------------------------------------------------------------------------
 ; RAM variables - General
 	phase	ramaddr($FFFF0000)	; Pretend we're in the RAM
@@ -1080,8 +1087,17 @@ Tails_Pos_Record_Buf:		ds.b	$100
 CNZ_saucer_data:		ds.b	$40	; the number of saucer bumpers in a group which have been destroyed. Used to decide when to give 500 points instead of 10
 CNZ_saucer_data_End:
 				ds.b	$C0	; $FFFFE740-$FFFFE7FF ; unused as far as I can tell
-Ring_Positions:			ds.b	$600
+Ring_Positions:			ds.b	(2 * Max_Rings) + 2	; dynamically calculates RAM used
+Ring_start_addr_ROM =		Ring_Positions+Rings_Space
+Ring_end_addr_ROM =		Ring_Positions+Rings_Space+4
+Ring_start_addr_ROM_P2 =	Ring_Positions+Rings_Space+8
+Ring_end_addr_ROM_P2 =		Ring_Positions+Rings_Space+$C
+Ring_free_RAM_start =		Ring_Positions+Rings_Space+$10
 Ring_Positions_End:
+				ds.b	$10		; RESERVED! DO NOT REMOVE THIS!!!
+; Can't dynamically calculate freed RAM right now, so for the while use 255 rings ($3F0),
+; 511 rings ($1F0) or 758 rings (none).
+				ds.b	$3F0
 
 Camera_RAM:
 Camera_X_pos:			ds.l	1
@@ -1310,10 +1326,9 @@ Tails_CPU_jumping:		ds.b	1
 
 Rings_manager_routine:		ds.b	1
 Level_started_flag:		ds.b	1
-Ring_start_addr:		ds.w	1
-Ring_end_addr:			ds.w	1
-Ring_start_addr_P2:		ds.w	1
-Ring_end_addr_P2:		ds.w	1
+Ring_start_addr_RAM:		ds.w	1
+Ring_start_addr_RAM_P2:		ds.w	1
+				ds.b	4	; unused
 CNZ_Bumper_routine:		ds.b	1
 CNZ_Bumper_UnkFlag:		ds.b	1	; Set only, never used again
 CNZ_Visible_bumpers_start:			ds.l	1
