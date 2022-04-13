@@ -1034,10 +1034,15 @@ WaterSurface2:			; Second water surface
 Reserved_Object_RAM_End:
 
 Dynamic_Object_RAM:		; Dynamic object RAM
-				ds.b	$28*object_size
-Dynamic_Object_RAM_2P_End:	; SingleObjLoad stops searching here in 2P mode
-				ds.b	$48*object_size
+				ds.b	$70*object_size
 Dynamic_Object_RAM_End:
+
+; 2P mode reserves 6 'blocks' of 12 RAM slots at the end.
+Dynamic_Object_RAM_2P_End = Dynamic_Object_RAM_End - ($C * 6) * object_size
+
+Object_RAM_End:
+
+SS_Shared_RAM:
 
 LevelOnly_Object_RAM:
 Tails_Tails:			; address of the Tail's Tails object
@@ -1067,12 +1072,13 @@ Tails_InvincibilityStars:
 				ds.b	object_size
 				ds.b	object_size
 LevelOnly_Object_RAM_End:
-
-Object_RAM_End:
 				ds.b	$200	; unused
 
 Primary_Collision:		ds.b	$300
 Secondary_Collision:		ds.b	$300
+
+SS_Shared_RAM_End:
+
 VDP_Command_Buffer:		ds.w	7*$12	; stores 18 ($12) VDP commands to issue the next time ProcessDMAQueue is called
 VDP_Command_Buffer_Slot:	ds.l	1	; stores the address of the next open slot for a queued VDP command
 
@@ -1346,6 +1352,8 @@ Demo_button_index_2P:		ds.w	1	; index into button press demo data, for player 2
 Demo_press_counter_2P:		ds.w	1	; frames remaining until next button press, for player 2
 Tornado_Velocity_X:		ds.w	1	; speed of Tails' plane in SCZ ($FFFFF736)
 Tornado_Velocity_Y:		ds.w	1
+
+Boss_variables:
 Boss_spawn_delay:		ds.b	1	; Boss spawn delay timer
 				ds.b	4	; $FFFFF73B-$FFFFF73E
 Boss_CollisionRoutine:		ds.b	1
@@ -1359,6 +1367,7 @@ Boss_X_vel:			ds.w	1
 Boss_Y_vel:			ds.w	1
 Boss_Countdown:		ds.w	1
 				ds.w	1	; $FFFFF75E-$FFFFF75F ; unused
+Boss_variables_end:
 
 Sonic_top_speed:		ds.w	1
 Sonic_acceleration:		ds.w	1
@@ -1377,9 +1386,11 @@ Obj_load_addr_right:		ds.l	1	; contains the address of the next object to load w
 Obj_load_addr_left:		ds.l	1	; contains the address of the last object loaded when moving left
 Obj_load_addr_2:		ds.l	1
 Obj_load_addr_3:		ds.l	1
-unk_F780:			ds.b	6	; seems to be an array of horizontal chunk positions, used for object position range checks
-unk_F786:			ds.b	3
-unk_F789:			ds.b	3
+
+Object_manager_2P_RAM:	; The next 16 bytes belong to this.
+Object_RAM_block_indices:	ds.b	6	; seems to be an array of horizontal chunk positions, used for object position range checks
+Player_1_loaded_object_blocks:	ds.b	3
+Player_2_loaded_object_blocks:	ds.b	3
 Camera_X_pos_last_P2:		ds.w	1
 Obj_respawn_index_P2:		ds.b	2	; respawn table indices of the next objects when moving left or right for the second player
 
@@ -1683,7 +1694,6 @@ RAM_End
 
 ; RAM variables - SEGA screen
 	phase	Object_RAM	; Move back to the object RAM
-SegaScr_Object_RAM:
 				; Unused slot
 				ds.b	object_size
 SegaScreenObject:		; Sega screen
@@ -1691,13 +1701,13 @@ SegaScreenObject:		; Sega screen
 SegaHideTM:				; Object that hides TM symbol on JP region
 				ds.b	object_size
 
-				ds.b	($80-3)*object_size
-SegaScr_Object_RAM_End:
+    if * > Object_RAM_End
+	fatal "Sega screen objects exceed size of object RAM buffer."
+    endif
 	dephase
 
 ; RAM variables - Title screen
 	phase	Object_RAM	; Move back to the object RAM
-TtlScr_Object_RAM:
 				; Unused slot
 				ds.b	object_size
 IntroSonic:			; stars on the title screen
@@ -1727,8 +1737,9 @@ TitleScreenMenu:
 IntroSmallStar2:
 				ds.b	object_size
 
-				ds.b	($70-2)*object_size
-TtlScr_Object_RAM_End:
+    if * > Object_RAM_End
+	fatal "Title screen objects exceed size of object RAM buffer."
+    endif
 	dephase
 
 ; RAM variables - Special stage
@@ -1744,13 +1755,7 @@ SSRAM_MiscKoz_SpecialObjectLocations:
 				ds.b	$1AE0
 	dephase
 
-	phase	Sprite_Table_Input
-SS_Sprite_Table_Input:		ds.b	$400	; in custom format before being converted and stored in Sprite_Table
-SS_Sprite_Table_Input_End:
-	dephase
-
 	phase	Object_RAM	; Move back to the object RAM
-SS_Object_RAM:
 				ds.b	object_size
 				ds.b	object_size
 SpecialStageHUD:		; HUD in the special stage
@@ -1775,11 +1780,14 @@ SpecialStageResults2:
 				ds.b	$51*object_size
 SS_Dynamic_Object_RAM_End:
 				ds.b	object_size
-SS_Object_RAM_End:
+    if * > Object_RAM_End
+	fatal "Special stage objects go past end of object RAM buffer."
+    endif
+	dephase
 
+	phase (SS_Shared_RAM)
 				; The special stage mode also uses the rest of the RAM for
 				; different purposes.
-SS_Misc_Variables:
 PNT_Buffer:			ds.b	$700
 PNT_Buffer_End:
 SS_Horiz_Scroll_Buf_2:		ds.b	$400
@@ -1847,7 +1855,10 @@ SS_RingsToGoBCD:		ds.w	1
 SS_HideRingsToGo:	ds.b	1
 SS_TriggerRingsToGo:	ds.b	1
 			ds.b	$58	; unused
-SS_Misc_Variables_End:
+
+    if * > SS_Shared_RAM_End
+	fatal "Special stage variables exceed size of shared RAM."
+    endif
 	dephase
 
 	phase	ramaddr(Horiz_Scroll_Buf)	; Still in SS RAM
@@ -1855,21 +1866,20 @@ SS_Horiz_Scroll_Buf_1:		ds.b	$400
 SS_Horiz_Scroll_Buf_1_End:
 	dephase
 
-	phase	ramaddr($FFFFF73E)	; Still in SS RAM
+	phase	ramaddr(Boss_variables)	; Still in SS RAM
+				ds.b	4 ; unused
 SS_Offset_X:			ds.w	1
 SS_Offset_Y:			ds.w	1
 SS_Swap_Positions_Flag:	ds.b	1
-	dephase
 
-	phase	ramaddr(Sprite_Table)	; Still in SS RAM
-SS_Sprite_Table:			ds.b	$280	; Sprite attribute table buffer
-SS_Sprite_Table_End:
-				ds.b	$80	; unused, but SAT buffer can spill over into this area when there are too many sprites on-screen
+    if * > Boss_variables_end
+	fatal "Special stage variables exceed size of boss variables."
+    endif
 	dephase
 
 ; RAM variables - Continue screen
 	phase	Object_RAM	; Move back to the object RAM
-ContScr_Object_RAM:
+				; These two object slots are presumably used by Sonic and Tails
 				ds.b	object_size
 				ds.b	object_size
 ContinueText:			; "CONTINUE" on the Continue screen
@@ -1877,32 +1887,31 @@ ContinueText:			; "CONTINUE" on the Continue screen
 ContinueIcons:			; The icons in the Continue screen
 				ds.b	$D*object_size
 
-				; Free slots
-				ds.b	$70*object_size
-ContScr_Object_RAM_End:
+    if * > Object_RAM_End
+	fatal "Continue screen objects exceed size of object RAM buffer."
+    endif
 	dephase
 
 ; RAM variables - 2P VS results screen
 	phase	Object_RAM	; Move back to the object RAM
-VSRslts_Object_RAM:
 VSResults_HUD:			; Blinking text at the bottom of the screen
 				ds.b	object_size
 
-				; Free slots
-				ds.b	$7F*object_size
-VSRslts_Object_RAM_End:
+    if * > Object_RAM_End
+	fatal "2P VS results screen objects exceed size of object RAM buffer."
+    endif
 	dephase
 
 ; RAM variables - Menu screens
 	phase	Object_RAM	; Move back to the object RAM
-Menus_Object_RAM:		; No objects are loaded in the menu screens
-				ds.b	$80*object_size
-Menus_Object_RAM_End:
+				; No objects are loaded in the menu screens
+    if * > Object_RAM_End
+	fatal "Menu screen objects exceed size of object RAM buffer."
+    endif
 	dephase
 
 ; RAM variables - Ending sequence
 	phase	Object_RAM
-EndSeq_Object_RAM:
 				ds.b	object_size
 				ds.b	object_size
 Tails_Tails_Cutscene:		; Tails' tails on the cut scene
@@ -1911,9 +1920,10 @@ EndSeqPaletteChanger:
 				ds.b	object_size
 CutScene:
 				ds.b	object_size
-				ds.b	($80-5)*object_size
-EndSeq_Object_RAM_End:
 
+    if * > Object_RAM_End
+	fatal "Ending sequence objects exceed size of object RAM buffer."
+    endif
 	dephase		; Stop pretending
 
 	!org	0	; Reset the program counter
