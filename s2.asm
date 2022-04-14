@@ -59124,6 +59124,7 @@ loc_2F4EE:	;	boss defeated
 	move.b	#4,anim(a1)	; flying off animation
 	move.b	#6,mapping_frame(a1)
 	moveq	#PLCID_Capsule,d0
+	jmp	(LoadPLC).l
 ; ===========================================================================
 
 loc_2F52A:	; Obj56_PropellerReloaded:	; Propeller after defeat
