@@ -27796,20 +27796,6 @@ BuildSprites_LevelLoop:
 ; loc_16630:
 BuildSprites_ObjLoop:
 	movea.w	(a4,d6.w),a0 ; a0=object
-
-    if gameRevision=0
-	; the additional check prevents a crash triggered by placing an object in debug mode while dead
-	; unfortunately, the code it branches *to* causes a crash of its own
-	tst.b	id(a0)			; is this object slot occupied?
-	beq.w	BuildSprites_Unknown	; if not, branch
-	tst.l	mappings(a0)		; does this object have any mappings?
-	beq.w	BuildSprites_Unknown	; if not, branch
-    else
-	; REV01 uses a better branch, but removed the useful check
-	tst.b	id(a0)			; is this object slot occupied?
-	beq.w	BuildSprites_NextObj	; if not, check next one
-    endif
-
 	andi.b	#$7F,render_flags(a0)	; clear on-screen flag
 	move.b	render_flags(a0),d0
 	move.b	d0,d4
@@ -27896,15 +27882,6 @@ BuildSprites_NextLevel:
 	move.b	#0,-5(a2)	; set link field to 0
 	rts
 ; ===========================================================================
-    if gameRevision=0
-BuildSprites_Unknown:
-	; In the Simon Wai prototype, this was a simple BranchTo, but later builds have this mystery line.
-	; This may have possibly been a debugging function, for helping the devs detect when an object
-	; tried to display with a blank ID or mappings pointer.
-	; The latter was actually an issue that plagued Sonic 1, but is (almost) completely absent in this game.
-	move.w	(1).w,d0	; causes a crash on hardware because of the word operation at an odd address
-	bra.s	BuildSprites_NextObj
-    endif
 ; loc_1671C:
 BuildSprites_MultiDraw:
 	move.l	a4,-(sp)
@@ -82839,11 +82816,9 @@ Debug_SpawnObject:
 	move.w	x_pos(a0),x_pos(a1)
 	move.w	y_pos(a0),y_pos(a1)
 	_move.b	mappings(a0),id(a1) ; load obj
-	; [Bug] The high bit of 'render_flags' is not cleared here. This causes RunObjectDisplayOnly
-	; to display the object even when it isn't fully initialised. This causes the
-	; crash that occurs when you attempt to spawn an object in Debug Mode while dead.
 	move.b	render_flags(a0),render_flags(a1)
 	move.b	render_flags(a0),status(a1)
+	andi.b	#$7F,render_flags(a1)
 	andi.b	#$7F,status(a1)
 	moveq	#0,d0
 	move.b	(Debug_object).w,d0
