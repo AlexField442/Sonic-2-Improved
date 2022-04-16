@@ -47080,12 +47080,16 @@ loc_24F04:
 	jsr	(SingleObjLoad2).l
 	bne.s	loc_24F28
 	moveq	#0,d0
-	move.w	#$A,d1
+	move.w	#bytesToLcnt(objoff_2C),d1 ; Copy everything up until 'objoff_2C', which is where the sub-object's own scratch RAM begins.
 
 loc_24F16:
 	move.l	(a0,d0.w),(a1,d0.w)
 	addq.w	#4,d0
 	dbf	d1,loc_24F16
+    if objoff_2C&3
+	move.w	(a0,d0.w),(a1,d0.w)
+    endif
+
 	move.b	#6,routine(a1)
 
 loc_24F28:
@@ -57580,7 +57584,7 @@ Obj5D_Pipe_0:
 	move.w	x_pos(a1),x_pos(a0)
 	move.w	y_pos(a1),y_pos(a0)
 	addi.w	#$18,y_pos(a0)
-	move.w	#$C,Obj5D_pipe_segments(a0)
+	move.w	#$B,Obj5D_pipe_segments(a0)
 	addq.b	#2,routine_secondary(a0)	; => Obj5D_Pipe_2_Load
 	movea.l	a0,a1
 	bra.s	Obj5D_Pipe_2_Load_Part2		; skip initial loading setup
@@ -57590,6 +57594,11 @@ Obj5D_Pipe_0:
 ; pipe extends gradually
 
 Obj5D_Pipe_2_Load:
+	; these lines have been moved from Obj5D_Pipe_2_Load_Part 2 since, under
+	; the circumstances, Obj5D_pipe_segments could discard the object
+	subq.w  #1,Obj5D_pipe_segments(a0)	; is pipe fully extended?
+	blt.s   Obj5D_Pipe_2_Load_End		; if yes, branch
+
 	jsr	(SingleObjLoad2).l
 	beq.s	+
 	rts
@@ -57598,9 +57607,6 @@ Obj5D_Pipe_2_Load:
 	move.l	a0,Obj5D_parent(a1)
 
 Obj5D_Pipe_2_Load_Part2:
-	subq.w  #1,Obj5D_pipe_segments(a0)	; is pipe fully extended?
-	blt.s   Obj5D_Pipe_2_Load_End		; if yes, branch
-
 	_move.b #ObjID_CPZBoss,id(a1)	; load obj5D
 	move.l	#Obj5D_MapUnc_2EADC,mappings(a1)
 	move.w	#make_art_tile(ArtTile_ArtNem_CPZBoss,1,0),art_tile(a1)
@@ -57744,8 +57750,8 @@ Obj5D_Pipe_Retract:
 	moveq	#0,d0
 	move.b	Obj5D_y_offset(a0),d0
 	add.w	y_pos(a0),d0	; get y pos of current pipe segment
-	lea	(Object_RAM).w,a1 ; a1=object
-	moveq	#(Dynamic_Object_RAM_End-Object_RAM)/object_size-1,d1
+	lea	(Dynamic_Object_RAM).w,a1 ; a1=object
+	moveq	#(Dynamic_Object_RAM_End-Dynamic_Object_RAM)/object_size-1,d1
 
 Obj5D_Pipe_Retract_Loop:
 	cmp.w	y_pos(a1),d0			; compare object's y position with current y offset
@@ -57761,12 +57767,9 @@ loc_2DFD8:
 ; ===========================================================================
 
 Obj5D_Pipe_Retract_ChkID:
-	; BUG: d7 should not be used here. This causes RunObjects routine to either
-	; run too few objects or too many objects, causing all sorts of errors.
-	moveq	#0,d7
-	move.b	#ObjID_CPZBoss,d7
-	cmp.b	id(a1),d7	; is object a subtype of the CPZ Boss?
+	cmpi.b	#ObjID_CPZBoss,id(a1)
 	beq.s	loc_2DFF0	; if yes, branch
+	lea	next_object(a1),a1
 	dbf	d1,Obj5D_Pipe_Retract_Loop
 	bra.s	Obj5D_PipeSegment
 ; ===========================================================================
@@ -57987,7 +57990,7 @@ loc_2E2E0:
 ; ===========================================================================
 
 Obj5D_Container_FallOff:
-	move.l	d7,-(sp)
+	move.l	d6,-(sp)
 	move.b	#$1E,Obj5D_timer(a0)
 	movea.l	Obj5D_parent(a0),a1 ; a1=object
 	move.w	x_pos(a1),x_pos(a0)
@@ -58006,7 +58009,7 @@ Obj5D_Container_FallOff:
 	asr.w	#6,d0
 	move.w	d0,x_vel(a0)
 	move.w	#-$380,y_vel(a0)
-	moveq	#0,d7
+	moveq	#0,d6
 	move.w	Obj5D_x_vel(a0),d0
 	addi.w	#$18,d0
 	bge.s	loc_2E356
@@ -58014,16 +58017,16 @@ Obj5D_Container_FallOff:
 	bge.s	loc_2E354
 	addi.w	#$18,d0
 	bge.s	loc_2E352
-	addq.w	#1,d7
+	addq.w	#1,d6
 
 loc_2E352:
-	addq.w	#1,d7
+	addq.w	#1,d6
 
 loc_2E354:
-	addq.w	#1,d7
+	addq.w	#1,d6
 
 loc_2E356:
-	subq.w	#1,d7
+	subq.w	#1,d6
 	bmi.w	loc_2E3E6
 
 loc_2E35C:
@@ -58040,7 +58043,7 @@ loc_2E35C:
 	move.w	x_pos(a0),x_pos(a1)
 	move.w	y_pos(a0),y_pos(a1)
 	addq.w	#8,y_pos(a1)
-	move.w	d7,d2
+	move.w	d6,d2
 	add.w	d2,d2
 	move.w	word_2E3EC(pc,d2.w),d3
 	btst	#0,render_flags(a0)
@@ -58057,10 +58060,10 @@ loc_2E35C:
 	addi.b	#$1E,d0
 	andi.w	#$7F,d0
 	move.b	d0,Obj5D_timer(a1)
-	dbf	d7,loc_2E35C
+	dbf	d6,loc_2E35C
 
 loc_2E3E6:
-	move.l	(sp)+,d7
+	move.l	(sp)+,d6
 
 JmpTo34_DisplaySprite ; JmpTo
 	jmp	(DisplaySprite).l
@@ -79365,8 +79368,12 @@ Touch_NoDuck:
 	move.w	#(Dynamic_Object_RAM_End-Dynamic_Object_RAM)/object_size-1,d6
 ; loc_3F5A0:
 Touch_Loop:
+	; Note that this uses a branch instead of a 'bsr'.
+	; This is because only one object can be collided with in a single frame.
+	; If 'Touch_CheckCollision' determines that the character isn't colliding with the
+	; object, then it manually branches back to 'Touch_NextObj' to try the next one.
 	move.b	collision_flags(a1),d0
-	bne.w	Touch_Width
+	bne.w	Touch_CheckCollision
 ; loc_3F5A8:
 Touch_NextObj:
 	lea	next_object(a1),a1 ; load obj address ; goto next object
@@ -79375,11 +79382,16 @@ Touch_NextObj:
 	moveq	#0,d0
 	rts
 ; ===========================================================================
-; loc_3F5B4: Touch_Height:
-Touch_Width:
+; loc_3F5B4: Touch_Height: Touch_Width:
+Touch_CheckCollision:
 	andi.w	#$3F,d0
 	add.w	d0,d0
 	lea	Touch_Sizes(pc,d0.w),a2
+
+	; From here to the branch to 'Touch_ChkValue', this code is the same as
+	; 'Touch_Boss_CheckWidth', only it returns to 'Touch_NextObj' instead of 'Touch_NextObj'.
+	; This could have been avoided with some clever stack usage.
+;Touch_CheckWidth:
 	moveq	#0,d1
 	move.b	(a2)+,d1
 	move.w	x_pos(a1),d0
@@ -79388,15 +79400,15 @@ Touch_Width:
 	bcc.s	loc_3F5D6
 	add.w	d1,d1
 	add.w	d1,d0
-	bcs.s	Touch_Height
+	bcs.s	Touch_CheckHeight
 	bra.w	Touch_NextObj
 ; ===========================================================================
 
 loc_3F5D6:
 	cmp.w	d4,d0
 	bhi.w	Touch_NextObj
-; loc_3F5DC: Touch_Width:
-Touch_Height:
+; loc_3F5DC: Touch_Width: Touch_Height:
+Touch_CheckHeight:
 	moveq	#0,d1
 	move.b	(a2)+,d1
 	move.w	y_pos(a1),d0
@@ -79412,6 +79424,7 @@ Touch_Height:
 loc_3F5F6:
 	cmp.w	d5,d0
 	bhi.w	Touch_NextObj
+	; Here ends the duplicate code.
 	bra.w	Touch_ChkValue
 ; ===========================================================================
 ; collision sizes (width,height)
@@ -79488,25 +79501,33 @@ Touch_Boss:
 	add.w	d5,d5
 	lea	(Dynamic_Object_RAM).w,a1
 	move.w	#(Dynamic_Object_RAM_End-Dynamic_Object_RAM)/object_size-1,d6
-
-loc_3F69C:
+; loc_3F69C:
+Touch_Boss_Loop:
+	; Note that this uses a branch instead of a 'bsr'.
+	; This is because only one object can be collided with in a single frame.
+	; If 'Touch_Boss_CheckCollision' determines that the character isn't colliding with the
+	; object, then it manually branches back to 'Touch_Boss_NextObj' to try the next one.
 	move.b	collision_flags(a1),d0
-	bne.s	loc_3F6AE
-
-loc_3F6A2:
+	bne.s	Touch_Boss_CheckCollision
+; loc_3F6A2:
+Touch_Boss_NextObj:
 	lea	next_object(a1),a1 ; a1=object
-	dbf	d6,loc_3F69C
+	dbf	d6,Touch_Boss_Loop
 
 	moveq	#0,d0
 	rts
 ; ===========================================================================
-
-loc_3F6AE:
+; loc_3F6AE:
+Touch_Boss_CheckCollision:
 	bsr.w	BossSpecificCollision
 	andi.w	#$3F,d0
-	beq.s	loc_3F6A2
+	beq.s	Touch_Boss_NextObj
 	add.w	d0,d0
 	lea	(a3,d0.w),a2
+	; From here to 'Touch_ChkValue', this code is the same as 'Touch_CheckWidth',
+	; only it returns to 'Touch_Boss_NextObj' instead of 'Touch_NextObj'.
+	; This could have been avoided with some clever stack usage.
+;Touch_Boss_CheckWidth:
 	moveq	#0,d1
 	move.b	(a2)+,d1
 	move.w	x_pos(a1),d0
@@ -79515,15 +79536,15 @@ loc_3F6AE:
 	bcc.s	loc_3F6D4
 	add.w	d1,d1
 	add.w	d1,d0
-	bcs.s	loc_3F6D8
-	bra.s	loc_3F6A2
+	bcs.s	Touch_Boss_CheckHeight
+	bra.s	Touch_Boss_NextObj
 ; ===========================================================================
 
 loc_3F6D4:
 	cmp.w	d4,d0
-	bhi.s	loc_3F6A2
-
-loc_3F6D8:
+	bhi.s	Touch_Boss_NextObj
+;loc_3F6D8:
+Touch_Boss_CheckHeight:
 	moveq	#0,d1
 	move.b	(a2)+,d1
 	move.w	y_pos(a1),d0
@@ -79533,12 +79554,13 @@ loc_3F6D8:
 	add.w	d1,d1
 	add.w	d1,d0
 	bcs.s	Touch_ChkValue
-	bra.s	loc_3F6A2
+	bra.s	Touch_Boss_NextObj
 ; ===========================================================================
 
 loc_3F6EE:
 	cmp.w	d5,d0
-	bhi.s	loc_3F6A2
+	bhi.s	Touch_Boss_NextObj
+	; Here ends the duplicate code.
 ; loc_3F6F2:
 Touch_ChkValue:
 	move.b	collision_flags(a1),d1	; load touch response number
@@ -81528,28 +81550,31 @@ APM_Null:	dc.w   0
 ; loc_407C0:
 PatchHTZTiles:
 	lea	(ArtNem_HTZCliffs).l,a0
-	lea	(Object_RAM+$800).w,a4
+	lea	(Dynamic_Object_RAM_End-$1800).w,a4
 	jsr	(NemDecToRAM).l
-	lea	(Object_RAM+$800).w,a1
+	lea	(Dynamic_Object_RAM_End-$1800).w,a1
 	lea	word_3FD9C(pc),a4
 	moveq	#0,d2
-	moveq	#7,d4
+	moveq	#8-1,d4
 
 loc_407DA:
-	moveq	#5,d3
+	moveq	#6-1,d3
 
 loc_407DC:
 	moveq	#-1,d0
 	move.w	(a4)+,d0
 	movea.l	d0,a2
-	moveq	#$1F,d1
+	moveq	#32-1,d1
 
 loc_407E4:
+	; Copy four pixels.
 	move.l	(a1),(a2)+
+	; Clear the bytes in 'Object_RAM'.
 	move.l	d2,(a1)+
+
 	dbf	d1,loc_407E4
 	dbf	d3,loc_407DC
-	adda.w	#$C,a4
+	adda.w	#6*2,a4
 	dbf	d4,loc_407DA
 	rts
 ; ===========================================================================
