@@ -1285,9 +1285,8 @@ ClearScreen:
 	clr.l	(Vscroll_Factor).w
 	clr.l	(unk_F61A).w
 
-	; Bug: These '+4's shouldn't be here; clearRAM accidentally clears an additional 4 bytes
-	clearRAM Sprite_Table,Sprite_Table_End+4
-	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End+4
+	clearRAM Sprite_Table,Sprite_Table_End
+	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End
 
 	startZ80
 	rts
@@ -4324,8 +4323,7 @@ Level_ClrRam:
 	clearRAM MiscLevelVariables,MiscLevelVariables_End
 	clearRAM Misc_Variables,Misc_Variables_End
 	clearRAM Oscillating_Data,Oscillating_variables_End
-	; Bug: The '+C0' shouldn't be here; CNZ_saucer_data is only $40 bytes large
-	clearRAM CNZ_saucer_data,CNZ_saucer_data_End+$C0
+	clearRAM CNZ_saucer_data,CNZ_saucer_data_End
 
 	cmpi.w	#chemical_plant_zone_act_2,(Current_ZoneAndAct).w ; CPZ 2
 	beq.s	Level_InitWater
@@ -6020,28 +6018,14 @@ SpecialStage:
 ; | Now we clear out some regions in main RAM where we want to store some  |
 ; | of our data structures.                                                |
 ; \------------------------------------------------------------------------/
-	; Bug: These '+4's shouldn't be here; clearRAM accidentally clears an additional 4 bytes
-	clearRAM Sprite_Table,Sprite_Table_End+4
-	clearRAM SS_Horiz_Scroll_Buf_1,SS_Horiz_Scroll_Buf_1_End+4
-	clearRAM SS_Shared_RAM,SS_Shared_RAM_End+4
+	clearRAM Sprite_Table,Sprite_Table_End
+	clearRAM SS_Horiz_Scroll_Buf_1,SS_Horiz_Scroll_Buf_1_End
+	clearRAM SS_Shared_RAM,SS_Shared_RAM_End
 	clearRAM Sprite_Table_Input,Sprite_Table_Input_End
 	clearRAM Object_RAM,Object_RAM_End
 
-	; However, the '+4' after SS_Shared_RAM_End is very useful. It resets the
-	; VDP_Command_Buffer queue, avoiding graphical glitches in the Special Stage.
-	; In fact, without resetting the VDP_Command_Buffer queue, Tails sprite DPLCs and other
-	; level DPLCs that are still in the queue erase the Special Stage graphics the next
-	; time ProcessDMAQueue is called.
-	; This '+4' doesn't seem to be intentional, because of the other useless '+4' above,
-	; and because a '+2' is enough to reset the VDP_Command_Buffer queue and fix this bug.
-	; This is a fortunate accident!
-	; Note that this is not a clean way to reset the VDP_Command_Buffer queue because the
-	; VDP_Command_Buffer_Slot address should be updated as well. They tried to do that in a
-	; cleaner way after branching to ClearScreen (see below). But they messed up by doing it
-	; after several WaitForVint calls.
-	; You can uncomment the two lines below to clear the VDP_Command_Buffer queue intentionally.
-	;clr.w	(VDP_Command_Buffer).w
-	;move.l	#VDP_Command_Buffer,(VDP_Command_Buffer_Slot).w
+	clr.w	(VDP_Command_Buffer).w
+	move.l	#VDP_Command_Buffer,(VDP_Command_Buffer_Slot).w
 
 	move	#$2300,sr
 	lea	(VDP_control_port).l,a6
@@ -9532,21 +9516,10 @@ SSStartNewAct:
 	cmpi.w	#100,d1
 	blt.s	+
 	addq.w	#1,d2
-  ; The following code does a more complete binary coded decimal conversion:
-    if 1==0
 -	addi.w	#$100,d0
 	subi.w	#100,d1
 	cmpi.w	#100,d1
 	bge.s	-
-    else
-	; This code (the original) is limited to 299 rings:
-	subi.w	#100,d1
-	move.w	#$100,d0
-	cmpi.w	#100,d1
-	blt.s	+
-	subi.w	#100,d1
-	addi.w	#$100,d0
-    endif
 +
 	divu.w	#10,d1
 	lsl.w	#4,d1
@@ -12185,9 +12158,7 @@ CheckCheats:	; This is called from 2 places: the options screen and the level se
 	tst.w	d2				; Test this to determine which cheat to enable
 	bne.s	+				; If not 0, branch
 	move.b	#$F,(Continue_count).w		; Give 15 continues
-	; The next line causes the bug where the OOZ music plays until reset.
-	; Remove "&$7F" to fix the bug.
-	move.b	#SndID_ContinueJingle&$7F,d0	; Play the continue jingle
+	move.b	#SndID_ContinueJingle,d0	; Play the continue jingle
 	jsr	(PlayMusic).l
 	bra.s	++
 ; ===========================================================================
@@ -12364,8 +12335,7 @@ EndingSequence:
 	move.w	d0,(Ending_VInt_Subrout).w
 	move.w	d0,(Credits_Trigger).w
 
-	; Bug: The '+4' shouldn't be here; clearRAM accidentally clears an additional 4 bytes
-	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End+4
+	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End
 
 	move.w	#$7FFF,(PalCycle_Timer).w
 	lea	(CutScene).w,a1
@@ -12440,8 +12410,7 @@ EndgameCredits:
 	move.w	d0,(Ending_VInt_Subrout).w
 	move.w	d0,(Credits_Trigger).w
 
-	; Bug: The '+4' shouldn't be here; clearRAM accidentally clears an additional 4 bytes
-	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End+4
+	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End
 
 	moveq	#signextendB(MusID_Credits),d0
 	jsr	(PlaySound).l
@@ -14835,12 +14804,7 @@ SwScrl_WFZ_Normal_Array:
 	dc.b $30, $C,$30,$10,$20,  8,$30, $C,$30,$10,$20,  8,$30, $C,$30,$10; 32
 	dc.b $20,  8,$30, $C,$30,$10,$20,  8,$30, $C,$30,$10,$20,  8,$30, $C; 48
 	dc.b $30,$10,$20,  8,$30, $C,$30,$10,$C0,  0,$C0,  0,$80,  0; 64
-; Note: this array is missing $80 lines compared to the transition array.
-; This causes the lower clouds to read data from the start of SwScrl_HTZ.
-; These are the missing entries:
-    if 1==0
 	dc.b $20,  8,$30, $C,$30,$10
-    endif
 ; ===========================================================================
 ; loc_C964:
 SwScrl_HTZ:
@@ -16210,18 +16174,6 @@ SwScrl_ARZ:
 	; Set row 11's speed
 	swap	d1
 	move.w	d1,(a3)+
-
-	; These instructions reveal that ARZ had slightly different scrolling,
-	; at one point:
-	; Above the background's mountains is a row of leaves, which is actually
-	; composed of three separately-scrolling rows. According to this code,
-	; the first and third rows were meant to scroll at a different speed to the
-	; second. Possibly due to how bad it looks, the speed values are overwritten
-	; a few instructions later, so all three move at the same speed.
-	; This code seems to pre-date the Simon Wai build, which uses the final's
-	; scrolling.
-	move.w	d1,(a2)		; Set row 1's speed
-	move.w	d1,4(a2)	; Set row 3's speed
 
 	move.w	(Camera_BG_X_pos).w,d0
 	move.w	d0,2(a2)	; Set row 2's speed
@@ -29112,7 +29064,7 @@ Touch_Rings_Done:
 Touch_ConsumeRing:
 	subq.w	#1,(Perfect_rings_left).w
 	cmpa.w	#MainCharacter,a0	; who collected the ring?
-	beq.w	CollectRing		; if it was Sonic, branch here
+	beq.w	CollectRing_Sonic	; if it was Sonic, branch here
 	bra.w	CollectRing_Tails	; if it was Tails, branch here
 ; ===========================================================================
 AttractRing:
@@ -29837,10 +29789,7 @@ loc_177FA:
 	move.w	#SndID_LargeBumper,d0
 	jmp	(PlaySound).l
 ; ===========================================================================
-	; [Bug] Sonic Team forgot to start this file with a boundary
-	; marker, meaning the game could potentially read past the start
-	; of the file and load random bumpers.
-	;dc.w	$0000, $0000, $0000
+	dc.w	$0000, $0000, $0000
 SpecialCNZBumpers_Act1:	BINCLUDE	"level/objects/CNZ 1 bumpers.bin"	; byte_1781A
 SpecialCNZBumpers_Act2:	BINCLUDE	"level/objects/CNZ 2 bumpers.bin"	; byte_1795E
 ; ===========================================================================
@@ -29909,8 +29858,7 @@ ObjectsManager_Init:
 	move.w	#$101,(a2)+	; the first two bytes are not used as respawn values
 	; instead, they are used to keep track of the current respawn indexes
 
-	; Bug: The '+7E' shouldn't be here; this loop accidentally clears an additional $7E bytes
-	move.w	#bytesToLcnt(Obj_respawn_data_End-Obj_respawn_data+$7E),d0 ; set loop counter
+	move.w	#bytesToLcnt(Obj_respawn_data_End-Obj_respawn_data),d0 ; set loop counter
 -	clr.l	(a2)+		; loop clears all other respawn values
 	dbf	d0,-
 
@@ -30699,10 +30647,7 @@ ObjectLayoutBoundary macro
 	dc.w	$FFFF, $0000, $0000
     endm
 
-	; [Bug] Sonic Team forgot to put a boundary marker here,
-	; meaning the game could potentially read past the start
-	; of the file and load random objects.
-	;ObjectLayoutBoundary
+	ObjectLayoutBoundary
 
 ; byte_1802A;
     if gameRevision=0
@@ -40888,10 +40833,7 @@ CheckLeftWallDist_Part2:
 ObjCheckLeftWallDist:
 	add.w	x_pos(a0),d3
 	move.w	y_pos(a0),d2
-	; Engine bug: colliding with left walls is erratic with this function.
-	; The cause is this: a missing instruction to flip collision on the found
-	; 16x16 block; this one:
-	;eori.w	#$F,d3
+	eori.w	#$F,d3
 	lea	(Primary_Angle).w,a4
 	move.b	#0,(a4)
 	movea.w	#-$10,a3
@@ -48154,10 +48096,6 @@ loc_261EC:
 	move.b	#8,width_pixels(a1)
 	move.b	#1,priority(a1)
 	move.b	#4,objoff_38(a1)
-	; (Bug) This line makes no sense: d1 is never set to anything,
-	; the object being written to is the parent, not the child,
-	; and angle isn't used by the parent at all.
-	move.b	d1,angle(a0)		; ???
 
 loc_26278:
 	dbf	d6,loc_261EC
@@ -48333,10 +48271,7 @@ loc_2645E:
 	btst	#0,status(a0)
 	beq.s	loc_2647A
 	not.w	d0
-	; BUG: this should be 2*$1C instead of $27. As is, this makes it
-	; impossible to get as high of a launch from flipped pressure springs
-	; as you can for unflipped ones.
-	addi.w	#$27,d0
+	addi.w	#2*$1C,d0
 
 loc_2647A:
 	tst.w	d0
@@ -55058,19 +54993,15 @@ SlotMachine_Routine2:
 SlotMachine_Routine3:
 	move.b	(Vint_runcount+3).w,d0		; 'Random' seed
 	andi.b	#7,d0				; Only want last 3 bits
-	subq.b	#4,d0				; Subtract 4...
-	addi.b	#$30,d0				; ...then add $30 (why not just add $2C?)
+	addi.b	#$2C,d0				; Add $2C
 	move.b	d0,slot1_speed(a4)		; This is our starting speed for slot 1
 	move.b	(Vint_runcount+3).w,d0		; 'Random' seed
-	rol.b	#4,d0				; Get top nibble...
-	andi.b	#7,d0				; ...but discard what was the sign bit
-	subq.b	#4,d0				; Subtract 4...
-	addi.b	#$30,d0				; ...then add $30 (why not just add $2C?)
+	andi.b	#7,d0				; Only want last 3 bits
+	addi.b	#$2C,d0				; Add $2C
 	move.b	d0,slot2_speed(a4)		; This is our starting speed for slot 2
 	move.b	(Vint_runcount+2).w,d0		; 'Random' seed
 	andi.b	#7,d0				; Only want last 3 bits
-	subq.b	#4,d0				; Subtract 4...
-	addi.b	#$30,d0				; ...then add $30 (why not just add $2C?)
+	addi.b	#$2C,d0				; Add $2C
 	move.b	d0,slot3_speed(a4)		; This is our starting speed for slot 3
 	move.b	#2,slot_timer(a4)		; Roll each slot twice under these conditions
 	clr.b	slot_index(a4)			; => SlotMachine_Subroutine1
@@ -58538,11 +58469,9 @@ loc_2E9A8:
 	rts
 ; ===========================================================================
 +
-	; BUG: this should be 'routine' instead of 'routine_secondary'.
-	addq.b	#2,routine_secondary(a0)
+	addq.b	#2,routine(a0)
 	move.l	#Obj5D_MapUnc_2EEA0,mappings(a0)
-	; BUG: this should be make_art_tile(ArtTile_ArtNem_BossSmoke_1,1,0) instead.
-	move.w	#make_art_tile(ArtTile_ArtNem_EggpodJets_1,0,0),art_tile(a0)
+	move.w	#make_art_tile(ArtTile_ArtNem_BossSmoke_1,1,0),art_tile(a0)
 	jsr	(Adjust2PArtPointer).l
 	move.b	#0,mapping_frame(a0)
 	move.b	#5,anim_frame_duration(a0)
@@ -61482,7 +61411,7 @@ Obj57_Main_SubA: ; slowly hovering down, no explosions
 	blo.s	Obj57_Main_SubA_Standard
 	lea	(Boss_AnimationArray).w,a1
 	move.b	#$D,7(a1)	; face grin when hit
-	_move.b	#2,0(a2)	; There is a bug here. This should be a1 instead of a2. A random part of RAM gets written to instead.
+	_move.b	#2,0(a1)
 	move.b	#0,1(a1)	; hover thingies fire off
 	addq.b	#2,boss_routine(a0)
 	bra.s	Obj57_Main_SubA_Standard
@@ -66074,18 +66003,10 @@ Obj5A_RingsNeeded:
 	moveq	#0,d0
 	cmpi.w	#100,d1
 	blt.s	+
-  ; The following code does a more complete binary coded decimal conversion:
-    if 1==0
 -	addi.w	#$100,d0
 	subi.w	#100,d1
 	cmpi.w	#100,d1
 	bge.s	-
-    else
-	; This code (the original) breaks when 101+ rings are needed:
--	addi.w	#$100,d0
-	subi.w	#100,d1
-	bgt.s	-
-    endif
 +
 	divu.w	#10,d1
 	lsl.w	#4,d1
@@ -66983,8 +66904,7 @@ loc_361D8:
     endm
     endif
 
-	; Bug: The '+4' shouldn't be here; clearRAM accidentally clears an additional 4 bytes
-	clearRAM Sprite_Table,Sprite_Table_End+4
+	clearRAM Sprite_Table,Sprite_Table_End
 
 	rts
 ; ===========================================================================
@@ -72323,9 +72243,7 @@ loc_39B92:
 loc_39BA4:
 	move.w	#$1000,(Camera_Max_X_pos).w
 	addq.b	#2,(Dynamic_Resize_Routine).w
-	; There's a bug here: Level_Music is a word long, not a byte.
-	; All this does is try to play Sound 0, which doesn't do anything.
-	move.b	(Level_Music).w,d0
+	move.w	(Level_Music).w,d0
 	jsr	(PlayMusic).l
 	bra.w	JmpTo65_DeleteObject
 ; ===========================================================================
@@ -72672,18 +72590,9 @@ ObjB0_Init:
 	subq.w	#1,d6
 -	move.w	(a2)+,d0
 	move.w	d0,d1
-	; Depending on the exact location (and size) of the art being used,
-	; you may encounter an overflow in the original code which garbles
-	; the enlarged Sonic. The following code fixes this:
-    if 1==0
 	andi.l	#$FFF,d0
 	lsl.l	#5,d0
 	lea	(a3,d0.l),a4 ; source ROM address of tiles to copy
-    else
-	andi.w	#$FFF,d0
-	lsl.w	#5,d0
-	lea	(a3,d0.w),a4 ; source ROM address of tiles to copy
-    endif
 	andi.w	#$F000,d1 ; abcd000000000000
 	rol.w	#4,d1	  ; (this calculation can be done smaller and faster
 	addq.w	#1,d1	  ; by doing rol.w #7,d1 addq.w #7,d1
@@ -72787,9 +72696,7 @@ loc_3A346:
 	bchg	#0,render_flags(a0)
 	bchg	#0,status(a0)
 
-	; This clears a lot more than the horizontal scroll buffer, which is $400 bytes.
-	; This is because the loop counter is erroneously set to $400, instead of ($400/4)-1.
-	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End+$C04	; Bug: That '+$C04' shouldn't be there; accidentally clears an additional $C04 bytes
+	clearRAM Horiz_Scroll_Buf,Horiz_Scroll_Buf_End
 
 	; Initialize streak horizontal offsets for Sonic going right.
 	; 9 full lines (8 pixels) + 7 pixels, 2-byte interleaved entries for PNT A and PNT B
@@ -80479,10 +80386,9 @@ Dynamic_Normal:
 
 loc_3FF30:
 	move.w	(a2)+,d6	; Get number of scripts in list
-	; S&K checks for empty lists, here
-;	bpl.s	.listnotempty	; If there are any, continue
-;	rts
-;.listnotempty:
+	bpl.s	.listnotempty	; If there are any, continue
+	rts
+.listnotempty:
 
 ; loc_3FF32:
 .loop:
@@ -81535,14 +81441,8 @@ APM_ARZ:	begin_animpat
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$0,0,0,2,1),make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$1,0,0,2,1)
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$2,0,0,2,1),make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$3,0,0,2,1)
 
-    if 1==0
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$0,0,0,2,1),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$1,0,0,2,1)
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$2,0,0,2,1),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$3,0,0,2,1)
-    else
-	; These are invalid animation entries for waterfalls (bug in original game):
-	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$C,0,0,2,1),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$D,0,0,2,1)
-	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$E,0,0,2,1),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$F,0,0,2,1)
-    endif
 
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall3+$0  ,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall3+$1  ,0,0,2,0)
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall3+$2  ,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall3+$3  ,0,0,2,0)
@@ -81553,14 +81453,8 @@ APM_ARZ:	begin_animpat
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$0,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$1,0,0,2,0)
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$2,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall1_1+$3,0,0,2,0)
 
-    if 1==0
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$0,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$1,0,0,2,0)
 	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$2,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$3,0,0,2,0)
-    else
-	; These are invalid animation entries for waterfalls (bug in original game):
-	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$C,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$D,0,0,2,0)
-	dc.w make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$E,0,0,2,0),make_block_tile(ArtTile_ArtUnc_Waterfall1_2+$F,0,0,2,0)
-    endif
 APM_ARZ_End:
 
 
@@ -82918,10 +82812,8 @@ Debug_ResetPlayerStats:
 	move.w	d0,x_vel(a1)
 	move.w	d0,y_vel(a1)
 	move.w	d0,inertia(a1)
-	; note: this resets the 'is underwater' flag, causing the bug where
-	; if you enter Debug Mode underwater, and exit it above-water, Sonic
-	; will still move as if he's underwater
-	move.b	#2,status(a1)
+	andi.b	#1<<6,status(a1)
+	ori.b	#2,status(a1)
 	move.b	#2,routine(a1)
 	move.b	#0,routine_secondary(a1)
 	rts
@@ -87504,15 +87396,7 @@ MusCred_PSG2:	dc.b $80,$30
 		dc.b $F7,$00,$0A
 		dc.w z80_ptr(-)
 		dc.b $80,$60,$F5,$00
-    if 1==1
-		; This is wrong: it should convert from EHZ 2P's PSG2 transpose ($D0)
-		; to CNZ's PSG2 transpose ($DC), but instead of adding $C, it subtracts
-		; $C, causing the note to be too low and underflow the sound driver's
-		; frequency table, producing invalid notes.
-		dc.b $E9,$F4
-    else
 		dc.b $E9,$0C
-    endif
 		dc.b $EC,$FF,$E9,$E8,$80,$60
 		dc.b $F8
 		dc.w z80_ptr(MusCreditsE246)
@@ -87521,11 +87405,6 @@ MusCred_PSG2:	dc.b $80,$30
 		dc.b $B6,$EC,$03,$80,$B1,$80,$B1,$80,$B1,$80,$B1,$EC
 		dc.b $FC,$80,$B1,$80,$B1,$80,$B1,$18,$08,$B1,$04,$EC
 		dc.b $01
-    if 1==1
-		; If the above bug is fixed, then this line needs removing (the track
-		; will already be $18 keys higher).
-		dc.b $E9,$18
-    endif
 		dc.b $F5,$05,$E1,$01,$80,$60,$80,$80,$80
 		dc.b $80,$80,$80,$0C,$CD,$06,$80,$D4,$CD,$80,$0C,$CD
 		dc.b $06,$80,$D4,$CD,$80,$18,$80,$54,$E9,$24,$EC,$FD
