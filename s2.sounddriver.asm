@@ -5,8 +5,8 @@
 ; RAS' work merged into SVN by Flamewing
 ; ---------------------------------------------------------------------------
 
-FixDriverBugs = 0
-OptimiseDriver = 0
+FixDriverBugs = 1
+OptimiseDriver = 1
 
 ; ---------------------------------------------------------------------------
 ; NOTES:
@@ -388,7 +388,7 @@ zVInt:    rsttarget
 
 	push	af			; Save 'af'
 	exx				; Effectively backs up 'bc', 'de', and 'hl'
-	call	zBankSwitchToMusic	; Bank switch to the music (depending on which BGM is playing in this version)
+	call	zBankSwitchToMusic	; Bank switch to the music
 	xor	a			; Clear 'a'
 	ld	(zDoSFXFlag),a		; Not updating SFX (updating music)
 	ld	ix,zAbsVar		; ix points to zComRange
@@ -2131,7 +2131,7 @@ zPlaySound:
 .sfx_loadloop:
 	push	bc		; Backup divisor/channel usage
 	xor	a		; a = 0 (will end up being NO CUSTOM VOICE TABLE!)
-	ld	(.bgmchannel+1),a	; Store into the instruction after .bgmchannel (self-modifying code) (Kind of pointless, always sets it to zero... maybe PSG would've had custom "flutter" tables?)
+	ld	(.is_psg+1),a	; Store into the instruction after .bgmchannel (self-modifying code)
 	push	hl		; Save current position within sound (offset 04h)
 	inc	hl		; Next byte...
 
@@ -2145,7 +2145,7 @@ zPlaySound:
 .sfxinitpsg:
 	; This is a PSG track!
 	; Always ends up writing zero to voice table pointer?
-	ld	(.bgmchannel+1),a	; Store into the instruction after .bgmchannel (self-modifying code)
+	ld	(.is_psg+1),a	; Store into the instruction after .bgmchannel (self-modifying code)
 	cp	0C0h		; Is this PSG3?
 	jr	nz,.getindex	; If not, skip this part
 	push	af
@@ -2238,10 +2238,11 @@ zPlaySound:
 	ldi						; *de++ = *hl++ (channel volume)
 
 ; zloc_A1D
-.bgmchannel:	; Modified way back within .sfx_loadloop
-	ld	a,0				; Self-modified code: if 00h, no custom voice table defined for this track
+.is_psg:	; Modified way back within .sfx_loadloop
+	ld	a,0				; Self-modified code
 	or	a				; Test it
-	jr	nz,.sfxpsginitdone		; If not zero, skip next part...
+	jr	nz,.sfxpsginitdone		; Jump, if this is a PSG track
+	; Do some more FM-related initialisation
 	ld	(ix+zTrack.AMSFMSPan),0C0h	; Default panning / AMS / FMS settings (just L/R Stereo enabled)
 
 ; zloc_A26
@@ -2404,7 +2405,7 @@ zUpdateFadeout:
 	inc	(ix+zTrack.Volume)		; increment channel volume (remember -- higher is quieter!)
 	ld	a,10h
 	cp	(ix+zTrack.Volume)		; Don't let volume go over 0Fh on PSG tracks!
-	jp	nc,.sendpsgvol			; This branch was inverted from Sonic 1's sound driver
+	jp	nc,.sendpsgvol
 	res	7,(ix+zTrack.PlaybackControl)	; Otherwise, stop playing this track
 	jr	.nextpsg
 
@@ -3829,30 +3830,30 @@ zSaxmanReadLoop:
 	exx				; shadow reg set
     if OptimiseDriver
 	srl	b			; b >> 1 (just a mask that lets us know when we need to reload)
-	jr	c,.continue		; if next bit of 'b' is set, we still have bits left in 'c', so continue
+	jr	c,.skip_fetching_descriptor	; if next bit of 'b' is set, we still have bits left in 'c', so continue
 	; If you get here, we're out of bits in 'c'!
 	call	zDecEndOrGetByte	; get next byte -> 'a'
 	ld	c,a			; a -> 'c'
 	ld	b,7Fh			; b = 7Fh (7 new bits in 'c')
 
-.continue:
+.skip_fetching_descriptor:
 	srl	c			; test next bit of 'c'
 	exx				; normal reg set
-	jr	nc,.is_compbit		; if bit not set, it's a compression bit; jump accordingly
+	jr	nc,.is_dictionary_reference	; if bit not set, it's a compression bit; jump accordingly
     else
 	srl	c			; c >> 1 (active control byte)
 	srl	b			; b >> 1 (just a mask that lets us know when we need to reload)
 	bit	0,b			; test next bit of 'b'
-	jr	nz,.continue		; if it's set, we still have bits left in 'c', so continue
+	jr	nz,.skip_fetching_descriptor	; if it's set, we still have bits left in 'c', so continue
 	; If you get here, we're out of bits in 'c'!
 	call	zDecEndOrGetByte	; get next byte -> 'a'
 	ld	c,a			; a -> 'c'
 	ld	b,0FFh			; b = FFh (8 new bits in 'c')
 
-.continue:
+.skip_fetching_descriptor:
 	bit	0,c			; test next bit of 'c'
 	exx				; normal reg set
-	jr	z,.is_compbit		; if bit not set, it's a compression bit; jump accordingly
+	jr	z,.is_dictionary_reference	; if bit not set, it's a compression bit; jump accordingly
     endif
 	; If you get here, there's a non-compressed byte
 	call	zDecEndOrGetByte	; get next byte -> 'a'
@@ -3863,7 +3864,7 @@ zSaxmanReadLoop:
 	exx				; normal reg set
 	jr	zSaxmanReadLoop		; loop back around...
 
-.is_compbit:
+.is_dictionary_reference:
 	call	zDecEndOrGetByte	; get next byte -> 'a'
 	ld	c,a			; a -> 'c' (low byte of target address)
 	call	zDecEndOrGetByte	; get next byte -> 'a'
@@ -3896,19 +3897,19 @@ zSaxmanReadLoop:
 	pop	hl			; shadow 'de' -> 'hl' (relative pointer, prior to all bytes read, relative)
 	or	a			; Clear carry
 	sbc	hl,bc			; hl -= bc
-	jr	nc,.skipbytes		; if result positive, jump ahead
+	jr	nc,.is_not_zero_fill	; if result positive, jump ahead
 	ex	de,hl			; current output pointer -> 'hl'
 	ld	b,a			; how many bytes to load -> 'b'
 
-.fillzeroloop:
+.fill_zero_loop:
 	ld	(hl),0			; fill in zeroes that many times
 	inc	hl
-	djnz	.fillzeroloop
+	djnz	.fill_zero_loop
 
 	ex	de,hl			; output pointer updated
 	jr	zSaxmanReadLoop		; loop back around...
 
-.skipbytes:
+.is_not_zero_fill:
 	ld	hl,zMusicData		; point at beginning of decompression point
 	add	hl,bc			; move ahead however many bytes
 	ld	c,a
