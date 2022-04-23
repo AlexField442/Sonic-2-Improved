@@ -41806,7 +41806,7 @@ Obj03:
 	move.b	routine(a0),d0
 	move.w	Obj03_Index(pc,d0.w),d1
 	jsr	Obj03_Index(pc,d1.w)
-	jmp	(MarkObjGone3).l
+	jmp	(MarkObjGone).l
 ; ===========================================================================
 ; off_1FCF0:
 Obj03_Index:	offsetTable
@@ -60115,6 +60115,8 @@ Obj89_Index:	offsetTable
 		offsetTableEntry.w Obj89_Init	; 0 - Init
 		offsetTableEntry.w Obj89_Main	; 2 - Main Vehicle
 		offsetTableEntry.w Obj89_Pillar	; 4 - Pillars & Arrows
+		offsetTableEntry.w Obj89_Arrow			; 6 - arrow
+		offsetTableEntry.w Obj89_Pillar_BulgingEyes	; 8 - pillar normal (standing)
 ; ===========================================================================
 ; loc_30494:
 Obj89_Init:
@@ -60570,8 +60572,6 @@ Obj89_Pillar_Index:	offsetTable				; pillar/arrow object
 		offsetTableEntry.w Obj89_Pillar_Sub0		; 0 - raise pillars
 		offsetTableEntry.w Obj89_Pillar_Sub2		; 2 - pillars shaking(?)
 		offsetTableEntry.w Obj89_Pillar_Sub4		; 4 - move pillars down
-		offsetTableEntry.w Obj89_Arrow			; 6 - arrow
-		offsetTableEntry.w Obj89_Pillar_BulgingEyes	; 8 - pillar normal (standing)
 ; ===========================================================================
 ; loc_309D2:
 Obj89_Pillar_Sub0:
@@ -60674,8 +60674,7 @@ Obj89_Pillar_Shoot:
 	jsr	(SingleObjLoad).l
 	bne.w	return_30B40
 	_move.b	#ObjID_ARZBoss,id(a1) ; load obj89
-	move.b	#4,boss_subtype(a1)
-	move.b	#8,routine_secondary(a1)	; => Obj89_Pillar_BulgingEyes
+	move.b	#8,boss_subtype(a1)	; => Obj89_Pillar_BulgingEyes
 	move.l	#Obj89_MapUnc_30D68,mappings(a1)
 	move.w	#make_art_tile(ArtTile_ArtNem_ARZBoss,0,0),art_tile(a1)
 	ori.b	#4,render_flags(a1)
@@ -60697,8 +60696,7 @@ Obj89_Pillar_Shoot:
 	jsr	(SingleObjLoad).l
 	bne.s	return_30B40
 	_move.b	#ObjID_ARZBoss,id(a1) ; load obj89
-	move.b	#4,boss_subtype(a1)
-	move.b	#6,routine_secondary(a1)	; => Obj89_Arrow
+	move.b	#6,boss_subtype(a1)	; => Obj89_Arrow
 	move.l	a2,obj89_arrow_parent2(a1)
 	move.b	d6,subtype(a1)
 	move.l	a3,obj89_arrow_parent(a1)
