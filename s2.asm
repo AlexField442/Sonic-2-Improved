@@ -18,19 +18,13 @@
 ; ASSEMBLY OPTIONS:
 ;
     ifndef gameRevision
-gameRevision = 1
+gameRevision = 2
     endif
 ;	| If 0, a REV00 ROM is built
 ;	| If 1, a REV01 ROM is built, which contains some fixes
 ;	| If 2, a (probable) REV02 ROM is built, which contains even more fixes
 padToPowerOfTwo = 1
 ;	| If 1, pads the end of the ROM to the next power of two bytes (for real hardware)
-;
-allOptimizations = 0
-;	| If 1, enables all optimizations
-;
-skipChecksumCheck = 0|allOptimizations
-;	| If 1, disables the unnecessary (and slow) bootup checksum calculation
 ;
 useFullWaterTables = 0
 ;	| If 1, zone offset tables for water levels cover all level slots instead of only slots 8-$F
@@ -348,21 +342,6 @@ CheckSumCheck:
 
 ; loc_328:
 ChecksumTest:
-    if skipChecksumCheck=0	; checksum code
-	movea.l	#EndOfHeader,a0	; start checking bytes after the header ($200)
-	movea.l	#ROMEndLoc,a1	; stop at end of ROM
-	move.l	(a1),d0
-	moveq	#0,d1
-; loc_338:
-ChecksumLoop:
-	add.w	(a0)+,d1
-	cmp.l	a0,d0
-	bhs.s	ChecksumLoop
-	movea.l	#Checksum,a1	; read the checksum
-	cmp.w	(a1),d1	; compare correct checksum to the one in ROM
-	bne.w	ChecksumError	; if they don't match, branch
-    endif
-;checksum_good:
 	lea	(System_Stack).w,a6
 	moveq	#0,d7
 
@@ -408,23 +387,6 @@ GameMode_2PLevelSelect:	bra.w	LevelSelectMenu2P	; 2P level select mode
 GameMode_EndingSequence:bra.w	JmpTo_EndingSequence	; End sequence mode
 GameMode_OptionsMenu:	bra.w	OptionsMenu		; Options mode
 GameMode_LevelSelect:	bra.w	LevelSelectMenu		; Level select mode
-; ===========================================================================
-    if skipChecksumCheck=0	; checksum error code
-; loc_3CE:
-ChecksumError:
-	move.l	d1,-(sp)
-	bsr.w	VDPSetupGame
-	move.l	(sp)+,d1
-	move.l	#vdpComm($0000,CRAM,WRITE),(VDP_control_port).l ; set VDP to CRAM write
-	moveq	#$3F,d7
-; loc_3E2:
-Checksum_Red:
-	move.w	#$E,(VDP_data_port).l ; fill palette with red
-	dbf	d7,Checksum_Red	; repeat $3F more times
-; loc_3EE:
-ChecksumFailed_Loop:
-	bra.s	ChecksumFailed_Loop
-    endif
 ; ===========================================================================
 ; loc_3F0:
 LevelSelectMenu2P: ;;
@@ -17871,6 +17833,8 @@ CalcBlockVRAMPos2:
 	tst.w	(Two_player_mode).w
 	bne.s	CalcBlockVRAMPos_2P
 	add.w	4(a3),d4	; add Y pos
+
+CalcBlockVRAMPos_NoCamera:
 	andi.w	#$F0,d4		; round down to the nearest 16-pixel boundary
 	andi.w	#$1F0,d5	; round down to the nearest 16-pixel boundary
 	lsl.w	#4,d4		; make it into units of $100 - the height in plane A of a 16x16
@@ -17885,8 +17849,8 @@ CalcBlockVRAMPos2:
 ; loc_E2A8:
 CalcBlockVRAMPos_2P:
 	add.w	4(a3),d4
-
-loc_E2AC:
+; loc_E2AC:
+CalcBlockVRAMPos_2P_NoCamera:
 	andi.w	#$1F0,d4
 	andi.w	#$1F0,d5
 	lsl.w	#3,d4
@@ -17946,9 +17910,15 @@ DrawInitialBG:
 	lea	(Camera_BG_X_pos).w,a3
 	lea	(Level_Layout+$80).w,a4	; background
 	move.w	#vdpComm(VRAM_Plane_B_Name_Table,VRAM,WRITE)>>16,d2
-	moveq	#0,d4
-	cmpi.b	#casino_night_zone,(Current_Zone).w
-	beq.w	++
+
+	move.b	(Current_Zone).w,d0
+	cmpi.b	#emerald_hill_zone,d0
+	beq.w	DrawInitialBG_LoadWhole64x32Plane
+	cmpi.b	#hill_top_zone,d0
+	beq.w	DrawInitialBG_LoadWhole64x32Plane
+	cmpi.b	#casino_night_zone,d0
+	beq.w	DrawInitialBG_LoadWhole64x32Plane
+
 	tst.w	(Two_player_mode).w
 	beq.w	+
 	cmpi.b	#mystic_cave_zone,(Current_Zone).w
@@ -17973,22 +17943,31 @@ DrawInitialBG:
 
 	rts
 ; ===========================================================================
-; dead code
-	moveq	#-$10,d4
+; The top of Casino Night Zone's background is bugged in Act 1 since the
+; game never fully loads the 64x32 plane; this fixes it, alongside the same
+; bug from occuring in EHZ and HTZ if the scrolling code is edited
 
-	moveq	#$F,d6
+DrawInitialBG_LoadWhole64x32Plane:
+	moveq	#0,d4
+
+	moveq	#16-1,d6	; Height of plane in blocks
 -	movem.l	d4-d6,-(sp)
 	moveq	#0,d5
 	move.w	d4,d1
-	bsr.w	CalcBlockVRAMPosB
+	; This is just a fancy efficient way of doing 'if true then call this, else call that'.
+	pea	+(pc)
+	tst.w	(Two_player_mode).w
+	beq.w	CalcBlockVRAMPos_NoCamera
+	bra.w	CalcBlockVRAMPos_2P_NoCamera
++
 	move.w	d1,d4
 	moveq	#0,d5
-	moveq	#$1F,d6
+	moveq	#32-1,d6	; Width of plane in blocks
 	move	#$2700,sr
-	bsr.w	DrawBlockRow
+	bsr.w	DrawBlockRow3
 	move	#$2300,sr
 	movem.l	(sp)+,d4-d6
-	addi.w	#$10,d4
+	addi.w	#16,d4
 	dbf	d6,-
 
 	rts
@@ -18001,7 +17980,7 @@ loc_E396:
 -	movem.l	d4-d6,-(sp)
 	moveq	#0,d5
 	move.w	d4,d1
-	bsr.w	loc_E2AC
+	bsr.w	CalcBlockVRAMPos_2P_NoCamera
 	move.w	d1,d4
 	moveq	#0,d5
 	moveq	#$1F,d6
